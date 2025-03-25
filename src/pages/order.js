@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { addDoc, collection } from 'firebase/firestore';
-import { db } from '../firebase';
-import { httpsCallable } from 'firebase/functions';
-import { functions } from '../firebase';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import Navbar from "../components/Navbar";
+import Footer from "../components/Footer";
 
 const OrderForm = () => {
   const [serviceType, setServiceType] = useState('');
@@ -50,6 +48,45 @@ const OrderForm = () => {
     'Startup', 'Small Business', 'Enterprise',
     'Non-Profit', 'Agency', 'Freelancer'
   ];
+
+  const getAdditionalInfo = () => {
+    const additionalInfo = {};
+    switch(serviceType) {
+      case 'portfolio':
+        additionalInfo.portfolioStyle = formData.portfolioStyle;
+        additionalInfo.projectsCount = formData.quantity;
+        break;
+      case 'business':
+        additionalInfo.businessType = formData.businessType;
+        additionalInfo.pagesCount = formData.quantity;
+        break;
+      case 'ecommerce':
+        additionalInfo.productsCount = formData.quantity;
+        additionalInfo.paymentGateway = formData.businessType;
+        break;
+      case 'webapp':
+      case 'other':
+        additionalInfo.deadline = formData.projectDeadline;
+        additionalInfo.budget = formData.budget;
+        break;
+    }
+    return additionalInfo;
+  };
+
+  const resetForm = () => {
+    setServiceType('');
+    setFormData({
+      name: '',
+      email: '',
+      phone: '',
+      details: '',
+      quantity: 1,
+      businessType: '',
+      projectDeadline: '',
+      portfolioStyle: '',
+      budget: ''
+    });
+  };
 
   const renderAdditionalFields = () => {
     switch(serviceType) {
@@ -196,106 +233,48 @@ const OrderForm = () => {
     setIsSubmitting(true);
 
     try {
-      // Get additional info based on service type
-      const additionalInfo = {};
-      switch(serviceType) {
-        case 'portfolio':
-          additionalInfo.portfolioStyle = formData.portfolioStyle;
-          additionalInfo.projectsCount = formData.quantity;
-          break;
-        case 'business':
-          additionalInfo.businessType = formData.businessType;
-          additionalInfo.pagesCount = formData.quantity;
-          break;
-        case 'ecommerce':
-          additionalInfo.productsCount = formData.quantity;
-          additionalInfo.paymentGateway = formData.businessType;
-          break;
-        case 'webapp':
-        case 'other':
-          additionalInfo.deadline = formData.projectDeadline;
-          additionalInfo.budget = formData.budget;
-          break;
-      }
-
       // Prepare submission data
       const submissionData = {
-        serviceType,
+        serviceType: serviceOptions.find(opt => opt.value === serviceType)?.label || serviceType,
         name: formData.name,
         email: formData.email,
         phone: formData.phone || '',
         details: formData.details,
-        additionalInfo,
+        additionalInfo: getAdditionalInfo(),
         submittedAt: new Date().toISOString()
       };
 
-      // Add to Firestore
-      await addDoc(collection(db, 'submissions'), submissionData);
-      
-      // Trigger email function with error handling
-      try {
-        const sendEmail = httpsCallable(functions, 'sendContactEmail');
-        await sendEmail({
-          ...submissionData,
-          toEmail: 'paragonsdigital@gmail.com', // Explicitly set recipient
-          subject: `New Service Request: ${serviceType} from ${formData.name}`
-        });
-        
-        toast.success('Form submitted successfully! We will contact you soon.', {
-          position: "top-center",
-          autoClose: 5000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          progress: undefined,
-        });
-      } catch (emailError) {
-        console.error('Email sending error:', emailError);
-        // Still show success if DB saved but email failed
-        toast.success('Request received! We saved your information but had trouble sending confirmation. We will contact you soon.', {
-          position: "top-center",
-          autoClose: 5000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          progress: undefined,
-        });
+      // Send data to server endpoint which will handle both DB storage and email
+      const response = await fetch('http://localhost:5000/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          message: `Service Type: ${submissionData.serviceType}\n\nDetails: ${formData.details}\n\nAdditional Info: ${JSON.stringify(submissionData.additionalInfo, null, 2)}`
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to submit form');
       }
 
-      // Reset form
-      setServiceType('');
-      setFormData({
-        name: '',
-        email: '',
-        phone: '',
-        details: '',
-        quantity: 1,
-        businessType: '',
-        projectDeadline: '',
-        portfolioStyle: '',
-        budget: ''
-      });
-
+      toast.success('Form submitted successfully! We will contact you soon.');
+      resetForm();
     } catch (error) {
       console.error('Submission error:', error);
-      toast.error('Failed to submit form. Please try again or contact us directly at paragonsdigital@gmail.com', {
-        position: "top-center",
-        autoClose: 5000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-        progress: undefined,
-      });
+      toast.error('Error submitting form. Please try again or contact us directly.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-blue-500 to-purple-600 p-4 sm:p-6">
+    <>      
+    <Navbar />
+    <div className="mt-20 min-h-screen flex items-center justify-center bg-gradient-to-r from-blue-500 to-purple-600 p-4 sm:p-6">
       <ToastContainer
         position="top-center"
         autoClose={5000}
@@ -419,8 +398,15 @@ const OrderForm = () => {
             ) : serviceType ? 'Submit Service Request' : 'Select Service to Continue'}
           </motion.button>
         </form>
+        
+        <div className="mt-4 text-center text-sm text-gray-600">
+          <p>Having trouble submitting? Email us directly at <a href="mailto:paragonsdigital@gmail.com" className="text-blue-600 hover:underline">paragonsdigital@gmail.com</a></p>
+        </div>
       </motion.div>
     </div>
+    <Footer />
+
+    </>
   );
 };
 

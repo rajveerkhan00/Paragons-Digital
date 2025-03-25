@@ -1,6 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-import { getFunctions } from "firebase/functions";
+import { getFirestore, collection, addDoc } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD8XbcVnxSYhpYaucRLyG6EqEuugFs92k4",
@@ -14,6 +13,14 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const functions = getFunctions(app);
 
-export { db, functions };
+const saveFormData = async (formData) => {
+  try {
+    await addDoc(collection(db, "contacts"), formData);
+    console.log("Data saved successfully!");
+  } catch (error) {
+    console.error("Error saving data: ", error);
+  }
+};
+
+export { db, saveFormData };
