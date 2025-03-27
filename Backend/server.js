@@ -3,68 +3,52 @@ import cors from "cors";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 
-// Load environment variables
 dotenv.config();
 
 const app = express();
 
-// Basic middleware
-app.use(cors());
+// ✅ Fix CORS for Vercel
+app.use(cors({ origin: "*", methods: ["POST"], allowedHeaders: ["Content-Type"] }));
 app.use(express.json());
 
-// Email endpoint
-app.post("/send-email", async (req, res) => {
+// ✅ API Route for Sending Email
+app.post("/api/send-email", async (req, res) => {
   const { name, email, message } = req.body;
 
-  // Basic validation
   if (!name || !email || !message) {
-    return res.status(400).json({ error: "All fields are required" });
+    return res.status(400).json({ success: false, message: "All fields are required" });
   }
 
   try {
-    // Create transporter
     const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || "smtp-relay.brevo.com",
-      port: parseInt(process.env.SMTP_PORT) || 587,
-      secure: false,
+      host: "smtp-relay.brevo.com",
+      port: 587,
+      secure: false, 
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
-      tls: {
-        // Less strict for local testing
-        rejectUnauthorized: false
-      }
+      tls: { minVersion: "TLSv1.2", rejectUnauthorized: true }
     });
 
-    // Email options
     const mailOptions = {
-      from: `"Contact Form" <${process.env.SMTP_USER}>`,
-      to: process.env.TO_EMAIL || "your-email@gmail.com",
-      subject: `New message from ${name}`,
+      from: `"Paragons Digital" <${process.env.SMTP_USER}>`,
+      to: "paragonsdigital@gmail.com",
+      subject: "New Contact Form Submission",
       text: `Name: ${name}\nEmail: ${email}\nMessage: ${message}`,
-      html: `
-        <p><strong>Name:</strong> ${name}</p>
-        <p><strong>Email:</strong> ${email}</p>
-        <p><strong>Message:</strong> ${message}</p>
-      `
+      html: `<p><strong>Name:</strong> ${name}</p>
+             <p><strong>Email:</strong> ${email}</p>
+             <p><strong>Message:</strong> ${message}</p>`,
     };
 
-    // Send email
     await transporter.sendMail(mailOptions);
-    res.json({ success: true, message: "Email sent successfully" });
+    res.status(200).json({ success: true, message: "Email sent successfully" });
 
   } catch (error) {
-    console.error("Error sending email:", error);
-    res.status(500).json({ 
-      error: "Failed to send email",
-      details: error.message 
-    });
+    console.error("❌ Email sending failed:", error);
+    res.status(500).json({ success: false, message: "Email sending failed", error: error.message });
   }
 });
 
-// Start server
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// ✅ Fix for Vercel (Export API handler)
+export default app;
